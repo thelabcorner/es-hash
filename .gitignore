@@ -3,3 +3,6 @@ dist/
 coverage/
 *.log
 artifacts/
+*.obj
+*.lib
+*.exp
