@@ -114,6 +114,7 @@ Also from the same team: **[ArcFit.dev](https://arcfit.dev)**, deterministic arc
 
 - [Why ESHASH?](#why-eshash)
 - [Features](#features)
+- [Get the Release](#get-the-release)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [API](#api)
@@ -153,6 +154,36 @@ The correctness/reference implementation is dependency-free ES3. Its public surf
 - The emitted `dist/ESHASH.jsx` is 20,832 bytes with the native-gate bridge; the Node ESM build is emitted separately as `dist/eshash-core.esm.mjs`.
 - `dist/ESHASH.accel.jsx` is the self-extracting ESPACK distribution; `ESHASH.accel.min.jsx` is the conservatively minified equivalent. Both embed `ESHASHNative_v1.dll` plus shared `ESB64Native_v2.dll`.
 - Accelerator auto-routing is evidence-driven: SHA-256 one-shot byte hashing adopts the native lane automatically; CRC-32 stays on the ES3 oracle by default because repeated end-to-end measurements crossed both sides of parity. `ESHASH.useEspack({ crc32: true })` opts into native CRC explicitly.
+
+---
+
+## Get the Release
+
+<div align="center">
+
+**All production bundles ship as GitHub release assets — this repo holds
+sources. Grab the runnable builds from the
+[Releases page](https://github.com/thelabcorner/es-hash/releases).**
+
+[![Latest release](https://img.shields.io/github/v/release/thelabcorner/es-hash?display_name=tag)](https://github.com/thelabcorner/es-hash/releases/latest)
+[![Release date](https://img.shields.io/github/release-date/thelabcorner/es-hash)](https://github.com/thelabcorner/es-hash/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/thelabcorner/es-hash/total)](https://github.com/thelabcorner/es-hash/releases)
+
+</div>
+
+**How it works, in three steps:**
+
+1. Open the [Releases page](https://github.com/thelabcorner/es-hash/releases).
+2. Pick the **latest stable** tag.
+3. Download the asset that matches your use case:
+
+| You are... | Take this release | And this asset |
+|---|---|---|
+| Using pure ES3 hashing or managing the native lane yourself | Latest stable | `ESHASH.jsx` |
+| Wanting a self-contained Windows x64 accelerated bundle | Latest stable | `ESHASH.accel.jsx` or `ESHASH.accel.min.jsx` |
+| Composing ESHASH into an existing ESPACK runtime | Latest stable | `ESHASH.facade.jsx` + `ESHASH.manifest.json` |
+| Deploying the direct native compatibility lane | Latest stable | `ESHASHNative.dll` |
+| Consuming the portable core from Node tooling | Latest stable | `eshash-core.esm.mjs` |
 
 ---
 
