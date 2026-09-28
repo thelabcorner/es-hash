@@ -4,6 +4,10 @@ import { sha256Bytes as sha256Oracle } from './sha256';
 var nativeLibrary: any = null;
 var nativePath = '';
 var nativeError = '';
+var nativeOwned = false;
+var nativeSource = 'none';
+var nativeSha256Enabled = false;
+var nativeCrc32Enabled = false;
 var sequence = 0;
 var bundleDir = '';
 
@@ -88,6 +92,40 @@ function fileDigest(bytes: string, method: string, fallback: (value: string) => 
   }
 }
 
+function clearNativeState(): void {
+  nativeLibrary = null;
+  nativePath = '';
+  nativeOwned = false;
+  nativeSource = 'none';
+  nativeSha256Enabled = false;
+  nativeCrc32Enabled = false;
+}
+
+function validateNativeLibrary(library: any): void {
+  if (!library || Number(library.version) !== 1 || typeof library.abiRevision !== 'function' ||
+      Number(library.abiRevision()) !== 1 ||
+      typeof library.sha256File !== 'function' || typeof library.crc32File !== 'function') {
+    throw new Error('ESHASH native DLL ABI mismatch');
+  }
+}
+
+export function enableNativeGate(options: any): any {
+  options = options || {};
+  var library = options.lib;
+  validateNativeLibrary(library);
+  if (nativeLibrary && nativeOwned && nativeLibrary !== library) {
+    try { nativeLibrary.unload(); } catch (ignoreUnload) {}
+  }
+  nativeLibrary = library;
+  nativePath = String(options.dllPath || options.path || '');
+  nativeOwned = options.owned === true;
+  nativeSource = options.source ? String(options.source) : (nativeOwned ? 'direct' : 'adopted');
+  nativeSha256Enabled = !options.routes || options.routes.sha256 !== false;
+  nativeCrc32Enabled = !!(options.routes && options.routes.crc32 === true);
+  nativeError = '';
+  return nativeStatus();
+}
+
 export function loadNative(path?: string): boolean {
   var candidates: string[] = [];
   var i: number;
@@ -104,30 +142,35 @@ export function loadNative(path?: string): boolean {
       candidate = new File(candidates[i]);
       if (!candidate.exists) continue;
       library = new ExternalObject('lib:' + candidate.fsName);
-      if (Number(library.version) !== 1 || typeof library.abiRevision !== 'function' ||
-          Number(library.abiRevision()) !== 1 ||
-          typeof library.sha256File !== 'function' || typeof library.crc32File !== 'function') {
+      try {
+        enableNativeGate({
+          lib: library,
+          dllPath: candidate.fsName,
+          owned: true,
+          source: 'direct',
+          routes: { sha256: true, crc32: true }
+        });
+      } catch (gateError) {
         try { library.unload(); } catch (ignoreUnload) {}
-        throw new Error('ESHASH native DLL ABI mismatch');
+        throw gateError;
       }
-      nativeLibrary = library;
-      nativePath = candidate.fsName;
-      nativeError = '';
       return true;
     } catch (error) { nativeError = String(error); }
   }
-  nativeLibrary = null;
-  nativePath = '';
+  clearNativeState();
   return false;
 }
 
 export function unloadNative(): boolean {
   var library = nativeLibrary;
   if (library === null) return true;
+  if (!nativeOwned) {
+    clearNativeState();
+    return true;
+  }
   try {
     library.unload();
-    nativeLibrary = null;
-    nativePath = '';
+    clearNativeState();
     return true;
   } catch (error) {
     nativeError = String(error);
@@ -141,14 +184,22 @@ export function nativeStatus(): any {
     path: nativePath,
     error: nativeError,
     abiRevision: nativeLibrary ? Number(nativeLibrary.abiRevision()) : null,
-    abi: 'ESABI 0.3.1 / Windows LONG32'
+    abi: 'ESABI 0.3.1 / Windows LONG32',
+    source: nativeSource,
+    owned: nativeOwned,
+    routes: {
+      sha256: nativeLibrary !== null && nativeSha256Enabled,
+      crc32: nativeLibrary !== null && nativeCrc32Enabled
+    }
   };
 }
 
 export function sha256Bytes(bytes: string): string {
+  if (!nativeSha256Enabled) return sha256Oracle(bytes);
   return fileDigest(bytes, 'sha256File', sha256Oracle);
 }
 
 export function crc32Bytes(bytes: string): number {
+  if (!nativeCrc32Enabled) return crc32Oracle(bytes);
   return fileDigest(bytes, 'crc32File', crc32Oracle);
 }

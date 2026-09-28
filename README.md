@@ -140,7 +140,7 @@ Also from the same team: **[ArcFit.dev](https://arcfit.dev)**, deterministic arc
 
 ExtendScript consumers often need a stable digest over either raw byte data or text, but those are different inputs. ESHASH makes the distinction explicit: `updateBytes` accepts a binary string whose code units are in `0..255`, while `updateText` encodes Unicode text as UTF-8. This prevents an implicit text encoding from silently changing the bytes being hashed.
 
-The correctness/reference implementation is dependency-free ES3. Its public surface includes streaming and one-shot forms of CRC-32/ISO-HDLC and SHA-256. An optional Windows x64 native lane is built against an immutable vendored ESABI 0.3.1 header snapshot. The SHA-256 algorithm follows FIPS 180-4 §6.2.2; the CRC check value follows the CRC-32/ISO-HDLC parameter set.
+The correctness/reference implementation is dependency-free ES3. Its public surface includes streaming and one-shot forms of CRC-32/ISO-HDLC and SHA-256. The preferred accelerated distribution is a self-extracting ESPACK bundle: it carries the ESABI-backed x64 payload plus the shared ESB64Native extraction accelerator in one JSX artifact, then adopts ESPACK's cached ExternalObject handle instead of opening a second copy. The SHA-256 algorithm follows FIPS 180-4 §6.2.2; the CRC check value follows the CRC-32/ISO-HDLC parameter set.
 
 ---
 
@@ -150,8 +150,9 @@ The correctness/reference implementation is dependency-free ES3. Its public surf
 - `sha256Bytes` / `crc32Bytes` process binary strings without text conversion; U+0000 is a byte, not a terminator.
 - `sha256Text` / `crc32Text` use UTF-8, combine valid surrogate pairs, and replace an unpaired surrogate with U+FFFD.
 - SHA-256 returns lowercase 64-digit hexadecimal; CRC-32 returns an unsigned 32-bit number and an eight-digit lowercase hexadecimal form.
-- The emitted `dist/ESHASH.jsx` is 19,537 bytes with the optional native bridge; the Node ESM build is emitted separately as `dist/eshash-core.esm.mjs`.
-- The default implementation is pure ES3; an optional x64 Windows ESABI lane accelerates one-shot byte digests when explicitly loaded.
+- The emitted `dist/ESHASH.jsx` is 20,832 bytes with the native-gate bridge; the Node ESM build is emitted separately as `dist/eshash-core.esm.mjs`.
+- `dist/ESHASH.accel.jsx` is the self-extracting ESPACK distribution; `ESHASH.accel.min.jsx` is the conservatively minified equivalent. Both embed `ESHASHNative_v1.dll` plus shared `ESB64Native_v2.dll`.
+- Accelerator auto-routing is evidence-driven: SHA-256 one-shot byte hashing adopts the native lane automatically; CRC-32 stays on the ES3 oracle by default because repeated end-to-end measurements crossed both sides of parity. `ESHASH.useEspack({ crc32: true })` opts into native CRC explicitly.
 
 ---
 
@@ -172,6 +173,15 @@ Include `dist/ESHASH.jsx` in an Illustrator script:
 ```
 
 The Node ESM entry is `dist/eshash-core.esm.mjs`.
+
+For a self-contained accelerated Illustrator distribution:
+
+```bash
+npm run build:native
+npm run build:accel:strict
+```
+
+Then load `dist/ESHASH.accel.jsx` (or the minified equivalent) instead of managing a DLL beside the script. ESPACK materializes the versioned payload under the local application-data cache, reuses its process-wide library cache on later loads, and exposes the adopted lane through `ESHASH.espack`.
 
 ---
 
@@ -212,6 +222,14 @@ var streamed = sha.digest();
 
 An update error invalidates that hasher; later reads throw rather than return a partial digest. A failed type check for a non-string argument does not alter a valid hasher.
 
+### Accelerator / native gate
+
+- `ESHASH.espack` — present on the ESPACK accelerator artifact; records the automatic adoption result.
+- `ESHASH.useEspack(options?)` — re-adopts the ESPACK-owned `ESHASHNative` handle. SHA-256 is native by default; pass `{ crc32: true }` to opt CRC-32 into the native file lane.
+- `ESHASH.nativeStatus()` — reports the active ABI, path, ownership source, and per-algorithm routing.
+- `ESHASH.unloadNative()` — unloads a directly-owned DLL, but only detaches ESHASH from an ESPACK-owned handle. ESPACK remains the authority for its cached library.
+- `ESHASH.loadNative(path?)` — compatibility/development lane for an explicitly deployed raw DLL; it retains the historical behavior of enabling both one-shot byte algorithms.
+
 ---
 
 ## Validation
@@ -221,7 +239,7 @@ An update error invalidates that hasher; later reads throw rather than return a 
 | Strict TypeScript | `npm run typecheck` | clean |
 | Fixed vectors, streaming boundaries, state errors | `node tests/core-test.mjs` | 68 assertions passed |
 | Deterministic differential/fuzz checks | `node tests/differential.mjs` | 16,388 checks; seed `0x5EED1234`; 2,048 byte cases, 2,048 text cases, and a 256 KiB payload |
-| Generated JSX structural contract | `node tests/artifact-contract.mjs` | ES3 parse; no mixed bitwise/shift expression; 19,537-byte artifact |
+| Generated JSX structural contract | `node tests/artifact-contract.mjs` | ES3 parse; no mixed bitwise/shift expression; 20,832-byte artifact |
 | Full static gate | `npm test` | build + all Node checks passed |
 | ESTC JSX check | `npm run estc:static` | passed |
 | Live Illustrator vectors | `npm run live-verify` | 18/18 vectors passed on Illustrator 30.6.0 / ExtendScript 4.5.6 |
@@ -229,6 +247,10 @@ An update error invalidates that hasher; later reads throw rather than return a 
 | Native file-transport parity | `npm run live-verify` after `npm run build:native` | 18/18 vectors, including embedded NUL and all byte values, passed on Illustrator 30.6.0 / ExtendScript 4.5.6 |
 | Packaged native fallback | `npm run native:release:live` | pass; staged package layout loads `native/release/ESHASHNative.dll` with ABI revision 1 and correct SHA-256 |
 | Native end-to-end benchmark | `npm run benchmark:native:live` | 4 KiB byte string, 2 warmups, 7 samples; timings include BINARY temp-file write, native file read, ABI call, and cleanup |
+| ESPACK byte/provenance contract | `npm run accel:contract` | pass; payload + ESB64Native bytes match build inputs, the bundle contains the current sibling ESB64 runtime byte-for-byte, and the npm whitelist exposes only the stable raw DLL |
+| Accelerator static + live parse | `npm run estc:accel:live` | 3/3 artifacts pass ES3 static checks and live compile-only parsing |
+| Full accelerator behavior | `npm run accel:live` | 13/13 checks pass: adoption, SHA/CRC parity, ownership, detach/re-adopt, and explicit CRC opt-in |
+| Minified accelerator behavior | `npm run accel:live:min` | same 13/13 live checks pass on the conservative minified artifact |
 
 The SHA-256 oracle is Node `crypto.createHash('sha256')`; CRC differential checks use an independent bit-at-a-time reference. The live verifier transports UTF-16 code units as hexadecimal so NUL and unpaired surrogates survive the COM boundary. `npm run build:native` emits a content-addressed DLL and `dist/native/ESHASHNative.current`; the verifier follows that manifest and exercises the native file lane, including embedded NUL bytes.
 
@@ -305,7 +327,9 @@ The shipped CRC lane uses the literal table. The measured 2,768-byte data cost r
 
 ## Security Model
 
-ESHASH is a deterministic data-transform library. Its default and streaming implementations are pure ES3. The opt-in native lane loads an ESABI 0.3.1 / ABI revision 1 x64 Windows DLL only after `loadNative()` is called. It writes byte strings through ExtendScript `File` in `BINARY` mode to a uniquely named temporary file; only the UTF-8 file path crosses the ExternalObject string ABI. This avoids sending payload bytes, including U+0000, through a channel known to truncate at NUL. Temporary inputs are removed after each call. If loading or a native operation fails, the byte one-shot call falls back to the pure implementation; `nativeStatus()` reports the last native error. Text and streaming APIs remain pure JSX. This opt-in file lane adds synchronous disk I/O and native code execution; use the pure lane where those are not desired. The byte API rejects code units above 255 rather than truncating them. SHA-256 alone is not a message-authentication code, password hash, or key-derivation function; use a dedicated construction for those purposes. CRC-32 is for accidental-corruption checks, not adversarial integrity.
+ESHASH is a deterministic data-transform library. `ESHASH.jsx` and the streaming implementations remain pure ES3 until a native gate is enabled. The ESPACK accelerator intentionally enables that gate during bundle evaluation; the raw-DLL compatibility lane does so only after `loadNative()`. Native byte hashing writes the byte string through ExtendScript `File` in `BINARY` mode to a uniquely named temporary file; only the UTF-8 file path crosses the ExternalObject string ABI. This avoids sending payload bytes, including U+0000, through a channel known to truncate at NUL. Temporary inputs are removed after each call. If a native operation fails, the one-shot byte call falls back to its pure implementation; `nativeStatus()` reports the last native error. Text and streaming APIs remain pure JSX.
+
+ESPACK owns libraries that it materializes and caches. ESHASH therefore records native-handle ownership: `unloadNative()` calls `ExternalObject.unload()` only for handles opened by `loadNative()`; for an ESPACK-adopted handle it detaches ESHASH state without invalidating ESPACK's shared cache. SHA-256 alone is not a message-authentication code, password hash, or key-derivation function; use a dedicated construction for those purposes. CRC-32 is for accidental-corruption checks, not adversarial integrity.
 
 ```jsx
 if (ESHASH.loadNative()) {
@@ -314,7 +338,7 @@ if (ESHASH.loadNative()) {
 }
 ```
 
-Build the optional DLL with `npm run build:native`. The repository carries an immutable ESABI 0.3.1 / ABI revision 1 header snapshot under `deps/esabi`, pinned to commit `65c9c3ce627a26a89d6bf90547678841df0cf981`; the build validates that pin before compiling. DLL filenames are content-addressed from native source + ESABI headers + pin + build recipe + MSVC identity, and `dist/native/ESHASHNative.current` selects the active development build. The build also refreshes one stable `dist/native/release/ESHASHNative.dll`, which is the only DLL included by `npm pack`; when the manifest is absent, `ESHASH.loadNative()` falls back to that packaged release path. `ESHASH.loadNative(path)` still accepts an explicit deployment path. `ESHASH.unloadNative()` releases the script-visible ExternalObject handle, but Illustrator 30.6 can keep the module mapping locked afterward, so cleanup is best-effort/deferred rather than an in-place rebuild assumption. Native builds target x64 Windows only and use Windows CNG for SHA-256.
+Build the optional DLL with `npm run build:native`. The repository carries an immutable ESABI 0.3.1 / ABI revision 1 header snapshot under `deps/esabi`, pinned to commit `65c9c3ce627a26a89d6bf90547678841df0cf981`; the build validates that pin before compiling. DLL filenames are content-addressed from native source + ESABI headers + pin + build recipe + MSVC identity, and `dist/native/ESHASHNative.current` selects the active development build. The stable `dist/native/release/ESHASHNative.dll` feeds both the raw-DLL compatibility package surface and the ESPACK payload. The accelerator build uses the current sibling `esb64/dist/vendor-esb64-runtime.js` and `esb64/native/bin/ESB64Native.dll` explicitly rather than ESPACK's vendored snapshots. `npm pack --dry-run` contains the four accelerator artifacts and exactly one raw DLL. Illustrator 30.6 can keep an unloaded module mapping locked, so direct-DLL cleanup remains best-effort/deferred rather than an in-place rebuild assumption. Native builds target x64 Windows only and use Windows CNG for SHA-256.
 
 ---
 
@@ -324,6 +348,7 @@ Build the optional DLL with `npm run build:native`. The repository carries an im
 |---|---|
 | ExtendScript ES3 | ESTC-built JSX; static and live parse checks passed |
 | Illustrator 30.6.0 / ExtendScript 4.5.6 | Live parity verified (18/18 vectors) |
+| ESPACK accelerator | Full + minified bundles live-verified; ESB64Native v2 extraction + ESHASHNative v1 adoption |
 | Other ExtendScript hosts | ES3-oriented implementation; not live-tested here |
 | Node.js 20+ | ESM build and test harnesses; Node 22.23.2 measured |
 
@@ -364,8 +389,14 @@ npm run live-verify        # 18 behavioral vectors in the real engine
 npm run benchmark          # Node layout/table comparison
 npm run benchmark:live     # ExtendScript layout/table and parse/eval comparison
 npm run build:native       # optional x64 Windows ExternalObject DLL + packaged release copy
+npm run build:accel:strict # ESPACK manifest + facade + full/minified self-extracting bundles
+npm run accel:contract     # byte-exact payload/accelerator provenance
+npm run estc:accel:live    # facade + full/minified ES3 and live parse
+npm run accel:live         # full self-extracting bundle behavior
+npm run accel:live:min     # minified self-extracting bundle behavior
 npm run native:release:live # prove the no-manifest packaged fallback layout in Illustrator
 npm run benchmark:native:live # valid end-to-end comparison; requires DLL + running Illustrator
+npm run release:gate       # full static/native/ESPACK/live release closure
 ```
 
 `npm test` builds `dist/ESHASH.jsx` and the Node ESM core, runs authoritative and streaming-boundary vectors, deterministic differential checks, and the generated-artifact structural audit. The live benchmark is separate from production code and requires COMTool V2 plus an already-running Illustrator instance.
@@ -381,8 +412,8 @@ eshash/
   deps/esabi/           immutable ESABI 0.3.1 header snapshot + provenance pin
   native/               ESABI-backed x64 Windows DLL source
   build-native.ps1      pinned-header MSVC x64 DLL build
-  dist/                 generated ESHASH.jsx and Node ESM output (gitignored)
-  eshash-build.mjs      ESM build plus ESTC JSX build
+  dist/                 generated base, ESPACK accelerator, manifest, and Node ESM output (gitignored)
+  eshash-build.mjs      ESM + ESTC + ESPACK accelerator composition
   extendscript.estc.config.mjs
   package.json
 ```

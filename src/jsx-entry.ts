@@ -9,7 +9,14 @@ import {
   sha256Bytes,
   sha256Text
 } from './index';
-import { crc32Bytes as crc32BytesFast, loadNative, nativeStatus, sha256Bytes as sha256BytesFast, unloadNative } from './native';
+import {
+  crc32Bytes as crc32BytesFast,
+  enableNativeGate,
+  loadNative,
+  nativeStatus,
+  sha256Bytes as sha256BytesFast,
+  unloadNative
+} from './native';
 
 function makeFacade(): any {
   return {
@@ -19,6 +26,7 @@ function makeFacade(): any {
     createSha256: createSha256,
     sha256Bytes: sha256BytesFast,
     sha256Text: sha256Text,
+    enableNativeGate: enableNativeGate,
     loadNative: loadNative,
     nativeStatus: nativeStatus,
     unloadNative: unloadNative
