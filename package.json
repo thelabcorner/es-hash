@@ -1,0 +1,44 @@
+{
+  "name": "eshash",
+  "version": "0.1.0",
+  "description": "Byte-defined streaming CRC-32 and SHA-256 for Adobe ExtendScript (ES3).",
+  "type": "module",
+  "main": "dist/eshash-core.esm.mjs",
+  "files": [
+    "dist/ESHASH.jsx",
+    "dist/eshash-core.esm.mjs",
+    "src/",
+    "tests/",
+    "extendscript.estc.config.mjs",
+    "eshash-build.mjs",
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "node eshash-build.mjs",
+    "typecheck": "npx tsc --noEmit -p .",
+    "test": "npm run build && node tests/core-test.mjs && node tests/differential.mjs && node tests/artifact-contract.mjs",
+    "benchmark": "npm run build && node tests/benchmark.mjs",
+    "estc:static": "node ../extendscript-toolchain/bin/estc.mjs check dist/ESHASH.jsx --no-target",
+    "estc:live-parse": "node ../extendscript-toolchain/bin/estc.mjs check dist/ESHASH.jsx --no-target --live",
+    "live-verify": "node tests/live-verify.mjs",
+    "benchmark:live": "node tests/benchmark-live.mjs",
+    "verify": "npm run typecheck && npm test && npm run estc:static",
+    "verify:engine": "npm run estc:live-parse && npm run live-verify",
+    "ci:static": "npm run verify",
+    "ci:local": "npm run ci:static && npm run verify:engine"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "typescript": "^5.8.3"
+  },
+  "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thelabcorner/es-hash.git"
+  }
+}
