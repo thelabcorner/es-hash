@@ -280,8 +280,8 @@ An update error invalidates that hasher; later reads throw rather than return a 
 | Native end-to-end benchmark | `npm run benchmark:native:live` | 4 KiB byte string, 2 warmups, 7 samples; timings include BINARY temp-file write, native file read, ABI call, and cleanup |
 | ESPACK manifest-v2 byte/provenance contract | `npm run accel:contract` | pass; dependency-first ESB64 → ESHASH closure, exact UTF-8 facade/payload provenance, explicit native capability, and the npm whitelist exposes only the stable raw DLL |
 | Accelerator static build | `npm run build:accel:strict` | facade, full bundle, and minified bundle pass the ES3 static parser; manifest-v2 contract passes separately |
-| Full accelerator behavior | `npm run accel:live` | Root-only Illustrator verification is required for the current manifest-v2 artifact; not run in this static validation |
-| Minified accelerator behavior | `npm run accel:live:min` | Illustrator verification is required for the current manifest-v2 artifact; not run in this static validation |
+| Full accelerator behavior | `npm run accel:live` | passed on Illustrator 30.6.0 / ExtendScript 4.5.6; root-only manifest-v2 activation exercised the full composed bundle |
+| Minified accelerator behavior | `npm run accel:live:min` | passed on Illustrator 30.6.0 / ExtendScript 4.5.6; root-only manifest-v2 activation exercised the minified composed bundle |
 
 The SHA-256 oracle is Node `crypto.createHash('sha256')`; CRC differential checks use an independent bit-at-a-time reference. The live verifier transports UTF-16 code units as hexadecimal so NUL and unpaired surrogates survive the COM boundary. `npm run build:native` emits a content-addressed DLL and `dist/native/ESHASHNative.current`; the verifier follows that manifest and exercises the native file lane, including embedded NUL bytes.
 
