@@ -1,6 +1,6 @@
 {
   "name": "eshash",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Byte-defined streaming CRC-32 and SHA-256 for Adobe ExtendScript (ES3).",
   "type": "module",
   "main": "dist/eshash-core.esm.mjs",

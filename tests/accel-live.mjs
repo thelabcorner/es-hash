@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { existsSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createComToolRunner } from '../../extendscript-toolchain/src/comtool-compat.mjs';
@@ -9,7 +9,8 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const arg = process.argv.indexOf('--bundle');
 const BUNDLE = arg >= 0 && process.argv[arg + 1] ? resolve(process.argv[arg + 1]) : join(ROOT, 'dist', 'ESHASH.accel.jsx');
 if (!existsSync(BUNDLE)) throw new Error('accelerator bundle missing: ' + BUNDLE);
-const PROBE = join(ROOT, 'tests', '.eshash-accel-live.jsx');
+const PROBE_DIR = mkdtempSync(join(ROOT, 'tests', '.eshash-accel-live-'));
+const PROBE = join(PROBE_DIR, 'probe.jsx');
 const bundlePath = BUNDLE.replace(/\\/g, '/').replace(/"/g, '\\"');
 
 writeFileSync(PROBE, [
@@ -17,6 +18,8 @@ writeFileSync(PROBE, [
   '(function () {',
   '  $.global["ESHASH"] = null;',
   '  $.global["ESPAK"] = null;',
+  '  $.global["ESB64"] = null;',
+  '  $.global["__ESPAK_LIBRARIES__"] = null;',
   '  $.evalFile(File("' + bundlePath + '"));',
   '  var H = $.global["ESHASH"];',
   '  var P = $.global["ESPAK"];',
@@ -24,6 +27,8 @@ writeFileSync(PROBE, [
   '  function check(name, value) { out.checks.push({ name: name, ok: value === true }); if (value !== true) throw new Error(name); }',
   '  try {',
   '    check("globals", !!H && !!P);',
+  '    check("single ESPAK runtime", P.version === "0.5.0" && P.config.bundleName === "eshash");',
+  '    check("ESB64 dependency activated transitively", !!$.global["ESB64"] && typeof $.global["ESB64"].atob === "function");',
   '    check("payload", P.config.payloads.length === 1 && P.config.payloads[0].name === "ESHASHNative");',
   '    check("shared accel", P.config.accel && P.config.accel.name === "ESB64Native" && P.config.accel.version === "2");',
   '    check("auto espack", H.espack && H.espack.ok === true);',
@@ -56,5 +61,5 @@ try {
   console.log('[eshash-accel-live] PASS ' + BUNDLE + ' ' + text);
 } finally {
   await COM.close().catch(() => {});
-  rmSync(PROBE, { force: true });
+  rmSync(PROBE_DIR, { recursive: true, force: true });
 }

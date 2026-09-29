@@ -9,8 +9,7 @@ import { build } from 'esbuild';
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const DIST = join(ROOT, 'dist');
 const ESTC = join(ROOT, '..', 'extendscript-toolchain', 'bin', 'estc.mjs');
-const ESB64_RUNTIME = join(ROOT, '..', 'esb64', 'dist', 'vendor-esb64-runtime.js');
-const ESB64_ACCEL = join(ROOT, '..', 'esb64', 'native', 'bin', 'ESB64Native.dll');
+const ESB64_MANIFEST = join(ROOT, '..', 'esb64', 'dist', 'ESB64.manifest.json');
 const REQUIRE_ACCEL = process.argv.includes('--require-accel');
 
 const ACCELERATOR = [
@@ -101,38 +100,79 @@ function minifyAccel(accelOut) {
   estcCheck('dist/ESHASH.accel.min.jsx');
 }
 
-function buildAccel() {
+function gitHead() {
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).trim();
+  } catch (ignore) {
+    return '';
+  }
+}
+
+async function buildAccel() {
   const espackBuild = join(ROOT, '..', 'espack', 'espack-build.mjs');
   const payloadDll = join(DIST, 'native', 'release', 'ESHASHNative.dll');
   if (!existsSync(espackBuild)) return accelSkip('sibling espack build tool is unavailable');
   if (!existsSync(payloadDll)) return accelSkip('native release DLL missing; run npm run build:native');
-  if (!existsSync(ESB64_RUNTIME)) return accelSkip('current ESB64 runtime missing; build ../esb64 first');
-  if (!existsSync(ESB64_ACCEL)) return accelSkip('current ESB64Native accelerator missing; build ../esb64 native first');
+  if (!existsSync(ESB64_MANIFEST)) return accelSkip('current ESB64 v2 composition manifest missing; build ../esb64 first');
 
-  const loaderOut = join(DIST, '.eshash-accel-bundle.jsx');
-  const manifestOut = join(DIST, 'ESHASH.manifest.json');
-  execFileSync(process.execPath, [
-    espackBuild,
-    '--embed', payloadDll,
-    '--out', loaderOut,
-    '--name', 'eshash',
-    '--manifest-out', manifestOut,
-    '--accel', ESB64_ACCEL,
-    '--accel-version', '2',
-    '--quiet'
-  ], {
-    cwd: ROOT,
-    stdio: 'inherit',
-    env: Object.assign({}, process.env, { ESB64_RUNTIME_PATH: ESB64_RUNTIME })
-  });
-
-  const loaderText = readFileSync(loaderOut, 'utf8');
+  const facadePath = join(DIST, 'ESHASH.facade.jsx');
   const facadeText = readFileSync(join(DIST, 'ESHASH.jsx'), 'utf8');
   const facadeOut = facadeText + '\n' + ACCELERATOR +
     '// ESHASH.facade.jsx - loader-free facade + ESPACK adapter; requires ESPAK on $.global\n';
-  const accelOut = loaderText + '\n' + facadeText + '\n' + ACCELERATOR +
-    '// ESHASH.accel.jsx - self-extracting ESPACK bundle + ESHASHNative gate\n';
-  writeFileSync(join(DIST, 'ESHASH.facade.jsx'), facadeOut, 'utf8');
+  writeFileSync(facadePath, facadeOut, 'utf8');
+  const packageInfo = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  const esb64Package = JSON.parse(readFileSync(join(ROOT, '..', 'esb64', 'package.json'), 'utf8'));
+  const espackBuildApi = await import(new URL('../espack/espack-build.mjs', import.meta.url).href);
+  const espackMergeApi = await import(new URL('../espack/espack-merge.mjs', import.meta.url).href);
+  const espackLibraries = await import(new URL('../espack/espack-libraries.mjs', import.meta.url).href);
+  const manifestOut = join(DIST, 'ESHASH.manifest.json');
+  const payloadBytes = readFileSync(payloadDll);
+  const library = espackLibraries.libraryFromFile({
+    id: 'eshash',
+    version: packageInfo.version,
+    global: 'ESHASH',
+    path: facadePath,
+    requires: [{ id: 'esb64', range: '^' + esb64Package.version }],
+    contract: [
+      { name: 'createCrc32', type: 'function' },
+      { name: 'createSha256', type: 'function' },
+      { name: 'crc32Bytes', type: 'function' },
+      { name: 'crc32Text', type: 'function' },
+      { name: 'enableNativeGate', type: 'function' },
+      { name: 'loadNative', type: 'function' },
+      { name: 'nativeStatus', type: 'function' },
+      { name: 'sha256Bytes', type: 'function' },
+      { name: 'sha256Text', type: 'function' },
+      { name: 'unloadNative', type: 'function' },
+      { name: 'useEspack', type: 'function' }
+    ],
+    provenance: {
+      package: packageInfo.name,
+      repository: packageInfo.repository && packageInfo.repository.url,
+      commit: gitHead(),
+      artifact: 'dist/ESHASH.facade.jsx'
+    }
+  });
+  const ownManifest = espackBuildApi.makeManifest({
+    bundleName: 'eshash',
+    cacheDir: '',
+    payloads: [{ name: 'ESHASHNative', version: '1', len: payloadBytes.length,
+      b64: payloadBytes.toString('base64'), fileName: 'ESHASHNative_v1.dll' }],
+    libraries: [library],
+    entries: [{ id: 'eshash', range: '=' + packageInfo.version }],
+    capabilities: [{ id: 'eshash.native', provider: 'eshash', mode: 'optional',
+      payloads: ['ESHASHNative'], accel: null }]
+  });
+  const composed = espackMergeApi.merge({
+    manifests: [ESB64_MANIFEST, ownManifest],
+    out: join(DIST, 'ESHASH.accel.jsx'),
+    manifestOut,
+    name: 'eshash',
+    entries: [{ id: 'eshash', range: '=' + packageInfo.version }],
+    deferB64: true
+  });
+  const accelOut = composed.text +
+    '// ESHASH.accel.jsx - ESPACK v2 flattened ESB64 -> ESHASH composition with one loader/control plane\n';
   writeFileSync(join(DIST, 'ESHASH.accel.jsx'), accelOut, 'utf8');
   estcCheck('dist/ESHASH.facade.jsx');
   estcCheck('dist/ESHASH.accel.jsx');
@@ -140,6 +180,6 @@ function buildAccel() {
   console.log('[eshash-build] wrote ESPACK accelerator, facade, manifest, and minified accelerator');
 }
 
-if (process.argv.includes('--accel')) buildAccel();
+if (process.argv.includes('--accel')) await buildAccel();
 
 console.log('[eshash-build] wrote dist/ESHASH.jsx and dist/eshash-core.esm.mjs');

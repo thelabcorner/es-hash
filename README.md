@@ -152,7 +152,7 @@ The correctness/reference implementation is dependency-free ES3. Its public surf
 - `sha256Text` / `crc32Text` use UTF-8, combine valid surrogate pairs, and replace an unpaired surrogate with U+FFFD.
 - SHA-256 returns lowercase 64-digit hexadecimal; CRC-32 returns an unsigned 32-bit number and an eight-digit lowercase hexadecimal form.
 - The emitted `dist/ESHASH.jsx` is 20,832 bytes with the native-gate bridge; the Node ESM build is emitted separately as `dist/eshash-core.esm.mjs`.
-- `dist/ESHASH.accel.jsx` is the self-extracting ESPACK distribution; `ESHASH.accel.min.jsx` is the conservatively minified equivalent. Both embed `ESHASHNative_v1.dll` plus shared `ESB64Native_v2.dll`.
+- `dist/ESHASH.accel.jsx` is the self-extracting ESPACK manifest-v2 distribution; `ESHASH.accel.min.jsx` is the conservatively minified equivalent. Its flattened, dependency-first closure is ESB64 1.3.0 → ESHASH, with one ESPAK control plane, `ESHASHNative_v1.dll`, and shared `ESB64Native_v2.dll`. The sidecar records exact UTF-8 facade lengths/SHA-256 provenance and the native capability contract.
 - Accelerator auto-routing is evidence-driven: SHA-256 one-shot byte hashing adopts the native lane automatically; CRC-32 stays on the ES3 oracle by default because repeated end-to-end measurements crossed both sides of parity. `ESHASH.useEspack({ crc32: true })` opts into native CRC explicitly.
 
 ---
@@ -278,10 +278,10 @@ An update error invalidates that hasher; later reads throw rather than return a 
 | Native file-transport parity | `npm run live-verify` after `npm run build:native` | 18/18 vectors, including embedded NUL and all byte values, passed on Illustrator 30.6.0 / ExtendScript 4.5.6 |
 | Packaged native fallback | `npm run native:release:live` | pass; staged package layout loads `native/release/ESHASHNative.dll` with ABI revision 1 and correct SHA-256 |
 | Native end-to-end benchmark | `npm run benchmark:native:live` | 4 KiB byte string, 2 warmups, 7 samples; timings include BINARY temp-file write, native file read, ABI call, and cleanup |
-| ESPACK byte/provenance contract | `npm run accel:contract` | pass; payload + ESB64Native bytes match build inputs, the bundle contains the current sibling ESB64 runtime byte-for-byte, and the npm whitelist exposes only the stable raw DLL |
-| Accelerator static + live parse | `npm run estc:accel:live` | 3/3 artifacts pass ES3 static checks and live compile-only parsing |
-| Full accelerator behavior | `npm run accel:live` | 13/13 checks pass: adoption, SHA/CRC parity, ownership, detach/re-adopt, and explicit CRC opt-in |
-| Minified accelerator behavior | `npm run accel:live:min` | same 13/13 live checks pass on the conservative minified artifact |
+| ESPACK manifest-v2 byte/provenance contract | `npm run accel:contract` | pass; dependency-first ESB64 → ESHASH closure, exact UTF-8 facade/payload provenance, explicit native capability, and the npm whitelist exposes only the stable raw DLL |
+| Accelerator static build | `npm run build:accel:strict` | facade, full bundle, and minified bundle pass the ES3 static parser; manifest-v2 contract passes separately |
+| Full accelerator behavior | `npm run accel:live` | Root-only Illustrator verification is required for the current manifest-v2 artifact; not run in this static validation |
+| Minified accelerator behavior | `npm run accel:live:min` | Illustrator verification is required for the current manifest-v2 artifact; not run in this static validation |
 
 The SHA-256 oracle is Node `crypto.createHash('sha256')`; CRC differential checks use an independent bit-at-a-time reference. The live verifier transports UTF-16 code units as hexadecimal so NUL and unpaired surrogates survive the COM boundary. `npm run build:native` emits a content-addressed DLL and `dist/native/ESHASHNative.current`; the verifier follows that manifest and exercises the native file lane, including embedded NUL bytes.
 
@@ -379,7 +379,7 @@ Build the optional DLL with `npm run build:native`. The repository carries an im
 |---|---|
 | ExtendScript ES3 | ESTC-built JSX; static and live parse checks passed |
 | Illustrator 30.6.0 / ExtendScript 4.5.6 | Live parity verified (18/18 vectors) |
-| ESPACK accelerator | Full + minified bundles live-verified; ESB64Native v2 extraction + ESHASHNative v1 adoption |
+| ESPACK accelerator | Manifest v2 resolves ESB64 1.3.0 before ESHASH, with ESB64Native v2 extraction + borrowed ESHASHNative v1 adoption; current v2 artifacts have not been live-verified |
 | Other ExtendScript hosts | ES3-oriented implementation; not live-tested here |
 | Node.js 20+ | ESM build and test harnesses; Node 22.23.2 measured |
 
