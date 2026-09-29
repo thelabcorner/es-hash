@@ -11,7 +11,7 @@
 [![Engine parity](https://img.shields.io/badge/engine%20parity-live%2018%2F18%20vectors-green)](#validation)
 [![Adobe: Creative Suite](https://img.shields.io/badge/Adobe%20-Creative%20Suite-red?logo=adobe&logoColor=white)](https://extendscript.docsforadobe.dev/)
 [![Engine](https://img.shields.io/badge/ExtendScript-ES3-green)](#compatibility)
-[![Runtime size](https://img.shields.io/badge/runtime-19.1%20KiB-orange)](#installation)
+[![Runtime size](https://img.shields.io/badge/runtime-20.3%20KiB-orange)](#installation)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL%203.0--or--later-blue)](https://www.gnu.org/licenses/gpl-3.0.html)
 
 </div>
